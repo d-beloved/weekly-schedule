@@ -20,6 +20,122 @@ st.markdown(
 # --- Config ---
 days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
 
+# --- Weekly Progress Overview ---
+st.markdown("""
+<div style='background: linear-gradient(90deg, #1a1a1a, #2a2a2a); 
+     border-radius: 15px; padding: 10px; margin: 20px 0; 
+     border: 2px solid #39FF14;'>
+""", unsafe_allow_html=True)
+
+with st.expander("📊 Weekly Setup Progress", expanded=False):
+    # Calculate progress stats
+    total_days = len(days)
+    days_with_tasks = sum(1 for day in days if st.session_state.tasks.get(day, []))
+    days_with_focus_hours = sum(1 for day in days if st.session_state.focus_hours.get(day, 0) > 0)
+    total_tasks = sum(len(st.session_state.tasks.get(day, [])) for day in days)
+    total_focus_hours = sum(st.session_state.focus_hours.get(day, 0) for day in days)
+
+    # Progress percentage
+    progress_percentage = int((days_with_tasks / total_days) * 100)
+
+    # Progress bar
+    progress_col1, progress_col2 = st.columns([3, 1])
+
+    with progress_col1:
+        st.markdown(f"""
+        <div style='background-color: #333; border-radius: 10px; padding: 5px; margin: 10px 0;'>
+            <div style='background: linear-gradient(90deg, #39FF14, #7ED321); 
+                width: {progress_percentage}%; height: 25px; border-radius: 8px; 
+                display: flex; align-items: center; justify-content: center; color: black; font-weight: bold;'>
+                {progress_percentage}% Complete
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with progress_col2:
+        st.metric("Days Configured", f"{days_with_tasks}/7")
+
+    # Quick stats in columns
+    stat_col1, stat_col2, stat_col3, stat_col4 = st.columns(4)
+
+    with stat_col1:
+        st.metric(
+            "Total Tasks", 
+            total_tasks,
+            delta=f"+{len(st.session_state.tasks.get(st.session_state.selected_day, []))}" if st.session_state.tasks.get(st.session_state.selected_day, []) else None
+        )
+
+    with stat_col2:
+        st.metric(
+            "Focus Hours/Week", 
+            f"{total_focus_hours}h",
+            delta=f"+{st.session_state.focus_hours.get(st.session_state.selected_day, 0)}h" if st.session_state.focus_hours.get(st.session_state.selected_day, 0) > 0 else None
+        )
+
+    with stat_col3:
+        if total_focus_hours > 0:
+            avg_daily = total_focus_hours / 7
+            st.metric("Avg Daily Focus", f"{avg_daily:.1f}h")
+        else:
+            st.metric("Avg Daily Focus", "0h")
+
+    with stat_col4:
+        unique_goals = len(st.session_state.goal_colors)
+        st.metric("Unique Goals", unique_goals)
+
+    # Daily breakdown with status indicators
+    st.markdown("#### 📅 Daily Status")
+
+    # Create 7 columns for days
+    day_cols = st.columns(7)
+
+    for i, day in enumerate(days):
+        with day_cols[i]:
+            tasks_count = len(st.session_state.tasks.get(day, []))
+            focus_hours = st.session_state.focus_hours.get(day, 0)
+            
+            # Status emoji and color
+            if tasks_count > 0 and focus_hours > 0:
+                status_emoji = "✅"
+                status_color = "#39FF14"
+                status_text = "Complete"
+            elif tasks_count > 0 or focus_hours > 0:
+                status_emoji = "⚠️"
+                status_color = "#F5A623"
+                status_text = "Partial"
+            else:
+                status_emoji = "⭕"
+                status_color = "#666666"
+                status_text = "Empty"
+            
+            # Highlight current selected day
+            border_style = "border: 3px solid #39FF14;" if day == st.session_state.selected_day else "border: 1px solid #444;"
+            
+            st.markdown(f"""
+            <div style='{border_style} border-radius: 10px; padding: 8px; margin: 2px; 
+                background-color: {"#2a2a2a" if day == st.session_state.selected_day else "#1a1a1a"}; 
+                text-align: center;'>
+                <div style='font-size: 20px;'>{status_emoji}</div>
+                <div style='font-weight: bold; color: {status_color}; font-size: 12px;'>{day[:3]}</div>
+                <div style='font-size: 10px; color: #888;'>{tasks_count} tasks</div>
+                <div style='font-size: 10px; color: #888;'>{focus_hours}h</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+    # Completion encouragement
+    if progress_percentage == 100:
+        st.success("🎉 **Week Complete!** All days configured. Ready to dominate your goals!")
+    elif progress_percentage >= 75:
+        st.info("🔥 **Almost There!** Just a few more days to configure.")
+    elif progress_percentage >= 50:
+        st.info("💪 **Halfway Done!** Keep building your weekly template.")
+    elif progress_percentage >= 25:
+        st.warning("🚀 **Good Start!** Continue adding tasks to build your routine.")
+    else:
+        st.warning("📋 **Let's Begin!** Start by adding tasks to build your weekly focus schedule.")
+
+    st.markdown("</div>", unsafe_allow_html=True)
+
 # Initialize focus_hours in session state
 if "focus_hours" not in st.session_state:
     st.session_state.focus_hours = {day: 0 for day in days}
