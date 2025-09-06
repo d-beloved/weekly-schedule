@@ -26,7 +26,7 @@ if "focus_hours" not in st.session_state:
 if "selected_day" not in st.session_state:
     st.session_state.selected_day = days[0]
 
-# Initialize temporary task inputs in session state
+# Initialize temporary session state variables for task inputs
 if "temp_task_name" not in st.session_state:
     st.session_state.temp_task_name = ""
 if "temp_duration" not in st.session_state:
@@ -55,9 +55,6 @@ with st.expander("Add or Edit Task", expanded=True):
     day = st.selectbox("Choose a day:", days, index=days.index(st.session_state.selected_day), key="day_select")
     if day != st.session_state.selected_day:
         st.session_state.selected_day = day
-        st.session_state.temp_task_name = ""
-        st.session_state.temp_duration = 1
-        st.session_state.temp_color = "#4682B4"
         st.session_state.editing_day = None
         st.session_state.editing_index = None
         st.rerun()
@@ -65,13 +62,9 @@ with st.expander("Add or Edit Task", expanded=True):
     # Editing logic
     if st.session_state.editing_day == day and st.session_state.editing_index is not None:
         task_to_edit = st.session_state.tasks[day][st.session_state.editing_index]
-        duration_default = task_to_edit[0]
-        task_name_default = task_to_edit[1]
-        color_default = task_to_edit[2]
-    else:
-        duration_default = st.session_state.temp_duration
-        task_name_default = st.session_state.temp_task_name
-        color_default = st.session_state.temp_color
+        st.session_state.temp_duration = task_to_edit[0]
+        st.session_state.temp_task_name = task_to_edit[1]
+        st.session_state.temp_color = task_to_edit[2]
 
     # Number input for focus hours for the selected day
     focus_hours_val = st.number_input(
@@ -83,15 +76,16 @@ with st.expander("Add or Edit Task", expanded=True):
     st.session_state.focus_hours[day] = focus_hours_val
     used = sum(task[0] for task in st.session_state.tasks.get(day, []))
     remaining = focus_hours_val - used
-    if remaining >= 0:
-        st.success(f"Remaining: {remaining}h")
-    else:
-        st.error(f"Overbooked by {-remaining}h")
+    if st.session_state.tasks.get(day, []):  # only show if there are tasks
+        if remaining >= 0:
+            st.success(f"Remaining: {remaining}h")
+        else:
+            st.error(f"Overbooked by {-remaining}h")
 
-    # Task inputs
-    task_name = st.text_input("Task name:", value=task_name_default, key=f"task_name_input_{day}")
-    duration = st.number_input("Duration (hours):", 1, max_hours, value=duration_default, key=f"duration_input_{day}")
-    color = st.color_picker("Pick a color:", color_default, key=f"color_picker_input_{day}")
+    # Task inputs using temp variables
+    task_name = st.text_input("Task name:", value=st.session_state.temp_task_name, key=f"task_name_input_{day}")
+    duration = st.number_input("Duration (hours):", 1, max_hours, value=st.session_state.temp_duration, key=f"duration_input_{day}")
+    color = st.color_picker("Pick a color:", value=st.session_state.temp_color, key=f"color_picker_input_{day}")
     submit_btn = st.button("Add Task" if st.session_state.editing_day is None else "Update Task", key=f"submit_btn_{day}")
 
     if submit_btn:
@@ -101,17 +95,16 @@ with st.expander("Add or Edit Task", expanded=True):
             if st.session_state.editing_day == day and st.session_state.editing_index is not None:
                 st.session_state.tasks[day][st.session_state.editing_index] = (duration, task_name, color)
                 st.success(f"Updated {task_name} on {day} ({duration}h)")
-                st.session_state.editing_day = None
-                st.session_state.editing_index = None
             else:
                 st.session_state.tasks[day].append((duration, task_name, color))
                 st.success(f"Added {task_name} on {day} ({duration}h)")
-                st.session_state.editing_day = None
-                st.session_state.editing_index = None
-            # Clear all fields except focus hours
+            # Clear temp variables
             st.session_state.temp_task_name = ""
             st.session_state.temp_duration = 1
             st.session_state.temp_color = "#4682B4"
+            st.session_state.editing_day = None
+            st.session_state.editing_index = None
+
             st.rerun()
 
 # --- Tasks List for Selected Day ---
@@ -148,7 +141,16 @@ with st.container():
         "📊 **Weekly Schedule Chart:** On mobile, scroll horizontally to view all hours."
     )
     fig, ax = plt.subplots(figsize=(18, 7))
-    fig.patch.set_facecolor("#f7f7f7")  # Light background
+    fig.patch.set_facecolor("#111111")  # GSAP inspired dark background
+    ax.set_facecolor("#1E1E1E")
+    ax.tick_params(colors="white")
+    ax.set_xlabel("Hours", fontsize=13, fontweight="bold", color="white")
+    ax.set_ylabel("")
+    ax.set_title("Weekly Focus Schedule", fontsize=16, fontweight="bold", pad=20, color="white")
+    for spine in ax.spines.values():
+        spine.set_color("#39FF14")
+        spine.set_linewidth(1.2)
+    ax.grid(axis="x", linestyle="--", alpha=0.3, color="white")
 
     for i, day in enumerate(days):
         allocated = st.session_state.focus_hours.get(day, 0)
@@ -188,17 +190,14 @@ with st.container():
             )
 
     ax.set_yticks(range(len(days)))
-    ax.set_yticklabels(days, fontsize=13, fontweight="bold")
+    ax.set_yticklabels(days, fontsize=13, fontweight="bold", color="white")
     ax.set_xticks(range(0, max_hours+1))
     ax.set_xlim(0, max_hours)
-    ax.set_xlabel("Hours", fontsize=13, fontweight="bold")
-    ax.set_title("Weekly Focus Schedule", fontsize=16, fontweight="bold", pad=20)
     ax.invert_yaxis()
-    ax.grid(axis="x", linestyle="--", alpha=0.5)
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
-    ax.spines['left'].set_visible(False)
-    ax.spines['bottom'].set_visible(False)
+    ax.spines['left'].set_visible(True)
+    ax.spines['bottom'].set_visible(True)
 
     st.pyplot(fig)
 
@@ -218,9 +217,9 @@ if st.button("Reset Schedule"):
     st.session_state.tasks = {day: [] for day in days}
     st.session_state.focus_hours = {day: 0 for day in days}
     st.session_state.selected_day = days[0]
+    st.session_state.editing_day = None
+    st.session_state.editing_index = None
     st.session_state.temp_task_name = ""
     st.session_state.temp_duration = 1
     st.session_state.temp_color = "#4682B4"
-    st.session_state.editing_day = None
-    st.session_state.editing_index = None
     st.rerun()
