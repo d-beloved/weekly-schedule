@@ -4,6 +4,8 @@ import matplotlib.colors as mcolors
 import io
 import textwrap
 import re
+import json
+from datetime import datetime
 
 # --- App title ---
 st.markdown(
@@ -212,6 +214,174 @@ if "editing_day" not in st.session_state:
     st.session_state.editing_day = None
 if "editing_index" not in st.session_state:
     st.session_state.editing_index = None
+
+# Initialize templates in session state
+if "templates" not in st.session_state:
+    st.session_state.templates = {}
+
+# --- Template Management ---
+st.markdown("""
+<div style='background: linear-gradient(90deg, #2a1a2a, #3a2a3a); 
+     border-radius: 15px; padding: 5px; margin: 20px 0; 
+     border: 2px solid #9013FE;'>
+""", unsafe_allow_html=True)
+
+with st.expander("💾 Template Management", expanded=False):
+    template_col1, template_col2 = st.columns([1, 1])
+
+    with template_col1:
+        st.markdown("#### 📤 Save Current Week")
+        
+        # Check if week has any data
+        has_tasks = any(st.session_state.tasks.get(day, []) for day in days)
+        has_focus_hours = any(st.session_state.focus_hours.get(day, 0) > 0 for day in days)
+        
+        if has_tasks or has_focus_hours:
+            template_name = st.text_input(
+                "Template name:",
+                placeholder="e.g., 3-Month Goals, Winter Routine, Study Schedule",
+                key="template_name_input"
+            )
+            
+            if st.button("💾 Save Template", use_container_width=True, type="primary"):
+                if template_name.strip():
+                    # Create template data
+                    template_data = {
+                        "tasks": dict(st.session_state.tasks),
+                        "focus_hours": dict(st.session_state.focus_hours),
+                        "goal_colors": dict(st.session_state.goal_colors),
+                        "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                        "total_tasks": sum(len(st.session_state.tasks.get(day, [])) for day in days),
+                        "total_focus_hours": sum(st.session_state.focus_hours.get(day, 0) for day in days)
+                    }
+                    
+                    st.session_state.templates[template_name.strip()] = template_data
+                    st.success(f"✅ Template '{template_name}' saved successfully!")
+                    st.rerun()
+                else:
+                    st.error("Please enter a template name.")
+        else:
+            st.info("💡 Add some tasks or focus hours to save a template.")
+
+    with template_col2:
+        st.markdown("#### 📥 Load Template")
+        
+        if st.session_state.templates:
+            # Template selection
+            template_names = list(st.session_state.templates.keys())
+            selected_template = st.selectbox(
+                "Choose template:",
+                [""] + template_names,
+                key="template_selector"
+            )
+            
+            if selected_template:
+                template_data = st.session_state.templates[selected_template]
+                
+                # Show template preview
+                st.markdown("**Preview:**")
+                st.write(f"📅 Created: {template_data['created_at']}")
+                st.write(f"📋 Tasks: {template_data['total_tasks']}")
+                st.write(f"⏰ Focus Hours: {template_data['total_focus_hours']}h/week")
+                
+                # Load options
+                load_col1, load_col2 = st.columns(2)
+                
+                with load_col1:
+                    if st.button("📂 Load Template", use_container_width=True, type="primary"):
+                        # Load template data
+                        st.session_state.tasks = template_data["tasks"]
+                        st.session_state.focus_hours = template_data["focus_hours"]
+                        st.session_state.goal_colors = template_data["goal_colors"]
+                        
+                        # Reset editing state
+                        st.session_state.editing_day = None
+                        st.session_state.editing_index = None
+                        st.session_state.clear_form = True
+                        
+                        if "form_key" not in st.session_state:
+                            st.session_state.form_key = 0
+                        st.session_state.form_key += 1
+                        
+                        st.success(f"✅ Loaded template '{selected_template}'!")
+                        st.rerun()
+                
+                with load_col2:
+                    if st.button("🗑️ Delete", use_container_width=True, type="secondary"):
+                        del st.session_state.templates[selected_template]
+                        st.success(f"🗑️ Deleted template '{selected_template}'")
+                        st.rerun()
+        else:
+            st.info("💡 No saved templates yet. Save your first template above!")
+
+    st.markdown("---")
+
+    # --- Import/Export ---
+    export_col1, export_col2 = st.columns([1, 1])
+
+    with export_col1:
+        st.markdown("#### 📤 Export Templates")
+        if st.session_state.templates:
+            # Create JSON export
+            export_data = {
+                "templates": st.session_state.templates,
+                "exported_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "app_version": "1.0"
+            }
+            
+            json_string = json.dumps(export_data, indent=2)
+            
+            st.download_button(
+                label="💾 Download Templates (.json)",
+                data=json_string,
+                file_name=f"focus_templates_{datetime.now().strftime('%Y%m%d')}.json",
+                mime="application/json",
+                use_container_width=True
+            )
+        else:
+            st.info("💡 No templates to export.")
+
+    with export_col2:
+        st.markdown("#### 📥 Import Templates")
+        uploaded_file = st.file_uploader(
+            "Choose templates file:",
+            type=['json'],
+            key="template_uploader"
+        )
+        
+        if uploaded_file is not None:
+            try:
+                import_data = json.load(uploaded_file)
+                
+                if "templates" in import_data:
+                    imported_templates = import_data["templates"]
+                    
+                    # Show preview
+                    st.write(f"**Found {len(imported_templates)} templates:**")
+                    for name in imported_templates.keys():
+                        st.write(f"• {name}")
+                    
+                    import_col1, import_col2 = st.columns(2)
+                    
+                    with import_col1:
+                        if st.button("📥 Import All", use_container_width=True):
+                            # Merge templates (existing ones will be overwritten if same name)
+                            st.session_state.templates.update(imported_templates)
+                            st.success(f"✅ Imported {len(imported_templates)} templates!")
+                            st.rerun()
+                    
+                    with import_col2:
+                        if st.button("🔄 Replace All", use_container_width=True):
+                            # Replace all templates
+                            st.session_state.templates = imported_templates
+                            st.success(f"✅ Replaced with {len(imported_templates)} templates!")
+                            st.rerun()
+                else:
+                    st.error("❌ Invalid template file format.")
+            except Exception as e:
+                st.error(f"❌ Error reading file: {str(e)}")
+
+    st.markdown("</div>", unsafe_allow_html=True)
 
 # --- Task Input ---
 with st.expander("Add or Edit Task", expanded=True):
