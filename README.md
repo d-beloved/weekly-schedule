@@ -3,6 +3,10 @@
 An interactive weekly schedule planner built with [Streamlit](https://streamlit.io) and [Matplotlib](https://matplotlib.org/).  
 You can add, edit, and delete tasks for each day of the week, and visualize them on a timeline.
 
+## Demo video
+
+_Add a screenshot of your app output here for clarity._
+
 ## Features
 - Add tasks with name, start time, duration, and color
 - Edit or delete existing tasks
@@ -40,16 +44,14 @@ streamlit run weekly_schedule.py
 
 The app will open in your browser at [http://localhost:8501](http://localhost:8501).
 
-## Example Screenshot
-
-_Add a screenshot of your app output here for clarity._
-
 ## Project Structure
 ```
 .
-├── weekly_schedule.py   # Main Streamlit app
-├── requirements.txt     # Dependencies
-└── README.md            # Project documentation
+├── LICENSE
+├── README.md						# Project documentation
+├── requirements.txt		# Dependencies
+├── venv
+└── weekly_schedule.py 	# Main Streamlit app
 ```
 
 ## Contributing
