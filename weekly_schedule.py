@@ -276,18 +276,15 @@ with st.container():
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
         # Export complete section as PNG including heading
-       # Export complete section as PNG including heading
         buf = io.BytesIO()
         
         # Create new figure with heading - increased height for proper spacing
-        complete_fig = plt.figure(figsize=(20, 12))
+        complete_fig = plt.figure(figsize=(25, 12))
         complete_fig.patch.set_facecolor("#0A0A0A")
         
         # Add title at top with more space
-        complete_fig.suptitle("📊 Weekly Focus Schedule", 
+        complete_fig.suptitle("Weekly Focus Schedule", 
                             fontsize=28, fontweight='bold', color='#39FF14', y=0.96)
-        complete_fig.text(0.5, 0.93, "Swipe horizontally on mobile to view all hours", 
-                         ha='center', fontsize=14, color='#888888')
         
         # Create subplot for the main chart - moved down to give title more room
         ax = complete_fig.add_subplot(111)
