@@ -239,6 +239,135 @@ with st.expander(f"Tasks for {st.session_state.selected_day}", expanded=True):
                     st.session_state.form_key += 1
                 st.rerun()
 
+# --- Copy Shortcuts ---
+if st.session_state.tasks.get(st.session_state.selected_day, []):  # Only show if current day has tasks
+    with st.expander("📋 Copy Tasks to Other Days", expanded=False):
+        st.subheader(f"Copy from {st.session_state.selected_day}")
+        
+        # Show current day's tasks with selection
+        current_tasks = st.session_state.tasks[st.session_state.selected_day]
+        st.write(f"**Select tasks to copy:**")
+        
+        # Create checkboxes for each task
+        selected_tasks = []
+        for idx, (duration, task_name, color) in enumerate(current_tasks):
+            if st.checkbox(f"{task_name} ({duration}h)", key=f"copy_task_{idx}", value=True):
+                selected_tasks.append((duration, task_name, color))
+        
+        if not selected_tasks:
+            st.warning("⚠️ Select at least one task to copy.")
+            st.stop()  # Don't show copy options if no tasks selected
+        
+        st.write("---")
+        
+        # Copy options in columns
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.write("**Quick Copy Options:**")
+            
+            if st.button("📅 Copy to All Weekdays (Mon-Fri)", use_container_width=True):
+                weekdays = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
+                copy_count = 0
+                for target_day in weekdays:
+                    if target_day != st.session_state.selected_day:
+                        # Copy tasks and update focus hours
+                        st.session_state.tasks[target_day] = selected_tasks.copy()
+                        total_hours = sum(task[0] for task in selected_tasks)
+                        st.session_state.focus_hours[target_day] = total_hours
+                        copy_count += 1
+                
+                if copy_count > 0:
+                    st.success(f"✅ Copied to {copy_count} weekdays!")
+                    st.rerun()
+            
+            if st.button("📆 Copy to Entire Week", use_container_width=True):
+                copy_count = 0
+                for target_day in days:
+                    if target_day != st.session_state.selected_day:
+                        # Copy tasks and update focus hours
+                        st.session_state.tasks[target_day] = selected_tasks.copy()
+                        total_hours = sum(task[0] for task in selected_tasks)
+                        st.session_state.focus_hours[target_day] = total_hours
+                        copy_count += 1
+                
+                if copy_count > 0:
+                    st.success(f"✅ Copied to all {copy_count} days!")
+                    st.rerun()
+        
+        with col2:
+            st.write("**Select Specific Days:**")
+            
+            # Multi-select for specific days
+            available_days = [day for day in days if day != st.session_state.selected_day]
+            selected_days = st.multiselect(
+                "Choose days to copy to:",
+                available_days,
+                key="copy_target_days"
+            )
+            
+            if selected_days and st.button("📝 Copy to Selected Days", use_container_width=True):
+                for target_day in selected_days:
+                    # Copy tasks and update focus hours
+                    st.session_state.tasks[target_day] = selected_tasks.copy()
+                    total_hours = sum(task[0] for task in selected_tasks)
+                    st.session_state.focus_hours[target_day] = total_hours
+                
+                st.success(f"✅ Copied to: {', '.join(selected_days)}!")
+                st.rerun()
+        
+        st.write("---")
+        
+        # Warning section
+        st.warning("""
+        ⚠️ **Note:** Copying will replace all existing tasks and focus hours on target days.
+        """)
+        
+        # Advanced options
+        with st.expander("⚙️ Advanced Copy Options", expanded=False):
+            st.write("**Copy Mode:**")
+            copy_mode = st.radio(
+                "How should copying work?",
+                ["Replace all tasks", "Add to existing tasks"],
+                key="copy_mode"
+            )
+            
+            st.write("**Focus Hours:**")
+            focus_mode = st.radio(
+                "How should focus hours be handled?",
+                ["Auto-calculate from copied tasks", "Keep existing focus hours", "Add to existing focus hours"],
+                key="focus_mode"
+            )
+            
+            # Custom copy with advanced options
+            if st.button("🔧 Copy with Advanced Settings", use_container_width=True):
+                if selected_days:
+                    for target_day in selected_days:
+                        if copy_mode == "Replace all tasks":
+                            st.session_state.tasks[target_day] = selected_tasks.copy()
+                        else:  # Add to existing
+                            existing_tasks = st.session_state.tasks.get(target_day, [])
+                            st.session_state.tasks[target_day] = existing_tasks + selected_tasks.copy()
+                        
+                        # Handle focus hours based on mode
+                        copied_hours = sum(task[0] for task in selected_tasks)
+                        if focus_mode == "Auto-calculate from copied tasks":
+                            if copy_mode == "Replace all tasks":
+                                st.session_state.focus_hours[target_day] = copied_hours
+                            else:  # Add to existing
+                                existing_focus = st.session_state.focus_hours.get(target_day, 0)
+                                st.session_state.focus_hours[target_day] = existing_focus + copied_hours
+                        elif focus_mode == "Add to existing focus hours":
+                            existing_focus = st.session_state.focus_hours.get(target_day, 0)
+                            st.session_state.focus_hours[target_day] = existing_focus + copied_hours
+                        # "Keep existing focus hours" does nothing
+                    
+                    mode_text = "replaced" if copy_mode == "Replace all tasks" else "added to"
+                    st.success(f"✅ Tasks {mode_text} {', '.join(selected_days)} with advanced settings!")
+                    st.rerun()
+                else:
+                    st.error("Please select at least one day to copy to.")
+
 # --- Plot Schedule ---
 with st.container():
     st.markdown("""
