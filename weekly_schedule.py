@@ -1,16 +1,44 @@
 import streamlit as st
 import matplotlib.pyplot as plt
 import io
+import textwrap
 
 # --- App title ---
-st.title("Weekly Schedule Planner")
+st.markdown(
+    """
+    <h1 style='text-align: center;'>
+        <span style='color: green;'>Focus Work</span>
+        <span style='color: gray; font-style: italic'> Planner </span>
+        <span style='font-size: 1em;'>⏳</span>
+    </h1>
+    """,
+    unsafe_allow_html=True
+)
 
 # --- Config ---
 days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
 
-# Choose time scale
-time_scale = st.radio("Select time scale:", ["12 hours", "24 hours"])
-max_hours = 12 if time_scale == "12 hours" else 24
+# Initialize focus_hours in session state
+if "focus_hours" not in st.session_state:
+    st.session_state.focus_hours = {day: 0 for day in days}
+
+# Initialize selected_day in session state
+if "selected_day" not in st.session_state:
+    st.session_state.selected_day = days[0]
+
+# Initialize temporary task inputs in session state
+if "temp_task_name" not in st.session_state:
+    st.session_state.temp_task_name = ""
+if "temp_duration" not in st.session_state:
+    st.session_state.temp_duration = 1
+if "temp_color" not in st.session_state:
+    st.session_state.temp_color = "#4682B4"
+
+# Calculate max_hours dynamically: if all focus hours are zero, set 12; else take max of focus_hours values.
+if all(v == 0 for v in st.session_state.focus_hours.values()):
+    max_hours = 12
+else:
+    max_hours = max(st.session_state.focus_hours.values())
 
 # Storage for tasks
 if "tasks" not in st.session_state:
@@ -22,77 +50,156 @@ if "editing_index" not in st.session_state:
 
 # --- Task Input ---
 with st.expander("Add or Edit Task", expanded=True):
-    with st.form("task_form"):
-        if st.session_state.editing_day is not None and st.session_state.editing_index is not None:
-            day = st.selectbox("Choose a day:", days, index=days.index(st.session_state.editing_day))
-            task_to_edit = st.session_state.tasks[st.session_state.editing_day][st.session_state.editing_index]
-            task_name_default = task_to_edit[2]
-            duration_default = task_to_edit[1]
-            start_default = task_to_edit[0]
-            color_default = task_to_edit[3]
+    st.subheader("Add or Edit a Task")
+    # Select day (rerun on change)
+    day = st.selectbox("Choose a day:", days, index=days.index(st.session_state.selected_day), key="day_select")
+    if day != st.session_state.selected_day:
+        st.session_state.selected_day = day
+        st.session_state.temp_task_name = ""
+        st.session_state.temp_duration = 1
+        st.session_state.temp_color = "#4682B4"
+        st.session_state.editing_day = None
+        st.session_state.editing_index = None
+        st.rerun()
+
+    # Editing logic
+    if st.session_state.editing_day == day and st.session_state.editing_index is not None:
+        task_to_edit = st.session_state.tasks[day][st.session_state.editing_index]
+        duration_default = task_to_edit[0]
+        task_name_default = task_to_edit[1]
+        color_default = task_to_edit[2]
+    else:
+        duration_default = st.session_state.temp_duration
+        task_name_default = st.session_state.temp_task_name
+        color_default = st.session_state.temp_color
+
+    # Number input for focus hours for the selected day
+    focus_hours_val = st.number_input(
+        f"{day} Focus Hours:",
+        0, 24,
+        value=st.session_state.focus_hours.get(day, 0),
+        key=f"focus_hours_{day}"
+    )
+    st.session_state.focus_hours[day] = focus_hours_val
+    used = sum(task[0] for task in st.session_state.tasks.get(day, []))
+    remaining = focus_hours_val - used
+    if remaining >= 0:
+        st.success(f"Remaining: {remaining}h")
+    else:
+        st.error(f"Overbooked by {-remaining}h")
+
+    # Task inputs
+    task_name = st.text_input("Task name:", value=task_name_default, key=f"task_name_input_{day}")
+    duration = st.number_input("Duration (hours):", 1, max_hours, value=duration_default, key=f"duration_input_{day}")
+    color = st.color_picker("Pick a color:", color_default, key=f"color_picker_input_{day}")
+    submit_btn = st.button("Add Task" if st.session_state.editing_day is None else "Update Task", key=f"submit_btn_{day}")
+
+    if submit_btn:
+        if not task_name:
+            st.error("Task name cannot be empty.")
         else:
-            day = st.selectbox("Choose a day:", days)
-            task_name_default = ""
-            duration_default = 1
-            start_default = 0
-            color_default = "#4682B4"
-
-        task_name = st.text_input("Task name:", value=task_name_default)
-        duration = st.number_input("Duration (hours):", 1, max_hours, value=duration_default)
-        start = st.number_input("Start time (hour):", 0, max_hours-1, value=start_default)
-        color = st.color_picker("Pick a color:", color_default)
-        submitted = st.form_submit_button("Add Task" if st.session_state.editing_day is None else "Update Task")
-
-        if submitted and task_name:
-            if st.session_state.editing_day is not None and st.session_state.editing_index is not None:
-                st.session_state.tasks[st.session_state.editing_day][st.session_state.editing_index] = (start, duration, task_name, color)
+            if st.session_state.editing_day == day and st.session_state.editing_index is not None:
+                st.session_state.tasks[day][st.session_state.editing_index] = (duration, task_name, color)
                 st.success(f"Updated {task_name} on {day} ({duration}h)")
                 st.session_state.editing_day = None
                 st.session_state.editing_index = None
             else:
-                st.session_state.tasks[day].append((start, duration, task_name, color))
+                st.session_state.tasks[day].append((duration, task_name, color))
                 st.success(f"Added {task_name} on {day} ({duration}h)")
+                st.session_state.editing_day = None
+                st.session_state.editing_index = None
+            # Clear all fields except focus hours
+            st.session_state.temp_task_name = ""
+            st.session_state.temp_duration = 1
+            st.session_state.temp_color = "#4682B4"
+            st.rerun()
 
-# --- Manage Tasks ---
-with st.expander("Manage Tasks", expanded=True):
-    st.header("Manage Tasks")
-    for day in days:
-        st.subheader(day)
-        tasks = st.session_state.tasks.get(day, [])
-        for idx, (start, duration, task_name, color) in enumerate(tasks):
-            col1, col2, col3 = st.columns([6,1,1])
-            with col1:
-                checked = st.checkbox(f"{task_name} ({duration}h)", key=f"{day}_{idx}")
-            with col2:
-                if st.button("Edit", key=f"edit_{day}_{idx}"):
-                    st.session_state.editing_day = day
-                    st.session_state.editing_index = idx
-                    st.experimental_rerun()
-            with col3:
-                if st.button("Delete", key=f"delete_{day}_{idx}"):
-                    st.session_state.tasks[day].pop(idx)
-                    st.experimental_rerun()
+# --- Tasks List for Selected Day ---
+with st.expander(f"Tasks for {st.session_state.selected_day}", expanded=True):
+    day = st.session_state.selected_day
+    tasks = st.session_state.tasks.get(day, [])
+    for idx, (duration, task_name, color) in enumerate(tasks):
+        col1, col2, col3 = st.columns([6,1,1])
+        with col1:
+            st.markdown(f"- {task_name} ({duration}h)")
+        with col2:
+            if st.button("Edit", key=f"edit_{day}_{idx}", type="primary", width="stretch"):
+                st.session_state.editing_day = day
+                st.session_state.editing_index = idx
+                task_to_edit = st.session_state.tasks[day][idx]
+                st.session_state.temp_duration = task_to_edit[0]
+                st.session_state.temp_task_name = task_to_edit[1]
+                st.session_state.temp_color = task_to_edit[2]
+                st.rerun()
+        with col3:
+            if st.button("Del", key=f"delete_{day}_{idx}", type="secondary", width="stretch"):
+                st.session_state.tasks[day].pop(idx)
+                if st.session_state.editing_day == day and st.session_state.editing_index == idx:
+                    st.session_state.editing_day = None
+                    st.session_state.editing_index = None
+                    st.session_state.temp_task_name = ""
+                    st.session_state.temp_duration = 1
+                    st.session_state.temp_color = "#4682B4"
+                st.rerun()
 
 # --- Plot Schedule ---
 with st.container():
     st.write(
         "📊 **Weekly Schedule Chart:** On mobile, scroll horizontally to view all hours."
     )
-    fig, ax = plt.subplots(figsize=(12, 6))
+    fig, ax = plt.subplots(figsize=(18, 7))
+    fig.patch.set_facecolor("#f7f7f7")  # Light background
 
     for i, day in enumerate(days):
-        for start, duration, label, color in st.session_state.tasks.get(day, []):
-            ax.barh(y=i, width=duration, left=start, height=0.6, color=color, edgecolor="black")
-            ax.text(start + duration/2, i, f"{label} ({duration}h)",
-                    ha="center", va="center", color="white", fontsize=9, fontweight="bold")
+        allocated = st.session_state.focus_hours.get(day, 0)
+        tasks = st.session_state.tasks.get(day, [])
+        used = sum(task[0] for task in tasks)
+        cumulative_start = 0
+        for duration, label, color in tasks:
+            if used > allocated:
+                facecolor = "#FF9999"
+                edgecolor = color
+                linewidth = 2
+            else:
+                facecolor = color
+                edgecolor = "black"
+                linewidth = 1
+            # Rounded bar edges
+            bar = ax.barh(
+                y=i, width=duration, left=cumulative_start, height=0.6,
+                color=facecolor, edgecolor=edgecolor, linewidth=linewidth
+            )
+            # Add value label inside bar
+            full_label = f"{label} ({duration}h)"
+            wrapped_label = textwrap.fill(full_label, width=50)
+            ax.text(
+                cumulative_start + duration/2, i,
+                wrapped_label,
+                ha="center", va="center", color="white",
+                fontsize=12, fontweight="bold"
+            )
+            cumulative_start += duration
+
+        # Show allocated hours as a faint bar behind tasks
+        if allocated > 0:
+            ax.barh(
+                y=i, width=allocated, left=0, height=0.6,
+                color="#e0e0e0", edgecolor="none", zorder=0
+            )
 
     ax.set_yticks(range(len(days)))
-    ax.set_yticklabels(days)
+    ax.set_yticklabels(days, fontsize=13, fontweight="bold")
     ax.set_xticks(range(0, max_hours+1))
     ax.set_xlim(0, max_hours)
-    ax.set_xlabel("Hours")
-    ax.set_title("Weekly Schedule")
+    ax.set_xlabel("Hours", fontsize=13, fontweight="bold")
+    ax.set_title("Weekly Focus Schedule", fontsize=16, fontweight="bold", pad=20)
     ax.invert_yaxis()
+    ax.grid(axis="x", linestyle="--", alpha=0.5)
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax.spines['left'].set_visible(False)
+    ax.spines['bottom'].set_visible(False)
+
     st.pyplot(fig)
 
     # Export figure as PNG
@@ -102,11 +209,18 @@ with st.container():
     st.download_button(
         label="Download Schedule as PNG",
         data=buf,
-        file_name="weekly_schedule.png",
+        file_name="my_focus_schedule.png",
         mime="image/png"
     )
 
 # --- Reset button ---
 if st.button("Reset Schedule"):
     st.session_state.tasks = {day: [] for day in days}
-    st.experimental_rerun()
+    st.session_state.focus_hours = {day: 0 for day in days}
+    st.session_state.selected_day = days[0]
+    st.session_state.temp_task_name = ""
+    st.session_state.temp_duration = 1
+    st.session_state.temp_color = "#4682B4"
+    st.session_state.editing_day = None
+    st.session_state.editing_index = None
+    st.rerun()

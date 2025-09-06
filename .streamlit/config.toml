@@ -1,0 +1,6 @@
+[theme]
+primaryColor = "#A0522D"             # sienna / terracotta
+backgroundColor = "#FAF0E6"          # linen (soft sand)
+secondaryBackgroundColor = "#EEDFCC" # deeper sand
+textColor = "#2C2C2C"                # charcoal gray
+font = "serif"

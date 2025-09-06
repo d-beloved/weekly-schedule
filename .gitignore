@@ -11,7 +11,7 @@ __pycache__/
 *.pyd
 
 # Streamlit cache
-.streamlit/
+.streamlit/secrets.toml
 
 # VSCode
 .vscode/
