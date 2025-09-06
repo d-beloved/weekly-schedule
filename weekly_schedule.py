@@ -22,6 +22,34 @@ st.markdown(
 # --- Config ---
 days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
 
+# Initialize focus_hours in session state
+if "focus_hours" not in st.session_state:
+    st.session_state.focus_hours = {day: 0 for day in days}
+
+# Initialize selected_day in session state
+if "selected_day" not in st.session_state:
+    st.session_state.selected_day = days[0]
+
+# Initialize form clearing flag
+if "clear_form" not in st.session_state:
+    st.session_state.clear_form = False
+
+# Initialize goal-color mapping and color palette
+if "goal_colors" not in st.session_state:
+    st.session_state.goal_colors = {}
+
+# Storage for tasks
+if "tasks" not in st.session_state:
+    st.session_state.tasks = {day: [] for day in days}
+if "editing_day" not in st.session_state:
+    st.session_state.editing_day = None
+if "editing_index" not in st.session_state:
+    st.session_state.editing_index = None
+
+# Initialize templates in session state
+if "templates" not in st.session_state:
+    st.session_state.templates = {}
+
 # --- Weekly Progress Overview ---
 st.markdown("""
 <div style='background: linear-gradient(90deg, #1a1a1a, #2a2a2a); 
@@ -138,27 +166,11 @@ with st.expander("📊 Weekly Setup Progress", expanded=False):
 
     st.markdown("</div>", unsafe_allow_html=True)
 
-# Initialize focus_hours in session state
-if "focus_hours" not in st.session_state:
-    st.session_state.focus_hours = {day: 0 for day in days}
-
-# Initialize selected_day in session state
-if "selected_day" not in st.session_state:
-    st.session_state.selected_day = days[0]
-
-# Initialize form clearing flag
-if "clear_form" not in st.session_state:
-    st.session_state.clear_form = False
-
 # Calculate max_hours dynamically: if all focus hours are zero, set 12; else take max of focus_hours values.
 if all(v == 0 for v in st.session_state.focus_hours.values()):
     max_hours = 12
 else:
     max_hours = max(st.session_state.focus_hours.values())
-
-# Initialize goal-color mapping and color palette
-if "goal_colors" not in st.session_state:
-    st.session_state.goal_colors = {}
 
 if "color_palette" not in st.session_state:
     # Curated color palette that looks good together
@@ -207,25 +219,7 @@ def get_goal_color(task_name):
     st.session_state.goal_colors[task_name] = new_color
     return new_color
 
-# Storage for tasks
-if "tasks" not in st.session_state:
-    st.session_state.tasks = {day: [] for day in days}
-if "editing_day" not in st.session_state:
-    st.session_state.editing_day = None
-if "editing_index" not in st.session_state:
-    st.session_state.editing_index = None
-
-# Initialize templates in session state
-if "templates" not in st.session_state:
-    st.session_state.templates = {}
-
 # --- Template Management ---
-st.markdown("""
-<div style='background: linear-gradient(90deg, #2a1a2a, #3a2a3a); 
-     border-radius: 15px; padding: 5px; margin: 20px 0; 
-     border: 2px solid #9013FE;'>
-""", unsafe_allow_html=True)
-
 with st.expander("💾 Template Management", expanded=False):
     template_col1, template_col2 = st.columns([1, 1])
 
