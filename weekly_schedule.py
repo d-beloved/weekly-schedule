@@ -7,7 +7,7 @@ import textwrap
 st.markdown(
     """
     <h1 style='text-align: center;'>
-        <span style='color: green;'>Focus Work</span>
+        <span style='color: #39FF14;'>Focus Work</span>
         <span style='color: gray; font-style: italic'> Planner </span>
         <span style='font-size: 1em;'>⏳</span>
     </h1>
@@ -26,13 +26,9 @@ if "focus_hours" not in st.session_state:
 if "selected_day" not in st.session_state:
     st.session_state.selected_day = days[0]
 
-# Initialize temporary session state variables for task inputs
-if "temp_task_name" not in st.session_state:
-    st.session_state.temp_task_name = ""
-if "temp_duration" not in st.session_state:
-    st.session_state.temp_duration = 1
-if "temp_color" not in st.session_state:
-    st.session_state.temp_color = "#4682B4"
+# Initialize form clearing flag
+if "clear_form" not in st.session_state:
+    st.session_state.clear_form = False
 
 # Calculate max_hours dynamically: if all focus hours are zero, set 12; else take max of focus_hours values.
 if all(v == 0 for v in st.session_state.focus_hours.values()):
@@ -57,14 +53,8 @@ with st.expander("Add or Edit Task", expanded=True):
         st.session_state.selected_day = day
         st.session_state.editing_day = None
         st.session_state.editing_index = None
+        st.session_state.clear_form = True
         st.rerun()
-
-    # Editing logic
-    if st.session_state.editing_day == day and st.session_state.editing_index is not None:
-        task_to_edit = st.session_state.tasks[day][st.session_state.editing_index]
-        st.session_state.temp_duration = task_to_edit[0]
-        st.session_state.temp_task_name = task_to_edit[1]
-        st.session_state.temp_color = task_to_edit[2]
 
     # Number input for focus hours for the selected day
     focus_hours_val = st.number_input(
@@ -82,30 +72,52 @@ with st.expander("Add or Edit Task", expanded=True):
         else:
             st.error(f"Overbooked by {-remaining}h")
 
-    # Task inputs using temp variables
-    task_name = st.text_input("Task name:", value=st.session_state.temp_task_name, key=f"task_name_input_{day}")
-    duration = st.number_input("Duration (hours):", 1, max_hours, value=st.session_state.temp_duration, key=f"duration_input_{day}")
-    color = st.color_picker("Pick a color:", value=st.session_state.temp_color, key=f"color_picker_input_{day}")
-    submit_btn = st.button("Add Task" if st.session_state.editing_day is None else "Update Task", key=f"submit_btn_{day}")
+    # Determine default values for form fields
+    if st.session_state.editing_day == day and st.session_state.editing_index is not None:
+        # Editing mode - use task values
+        task_to_edit = st.session_state.tasks[day][st.session_state.editing_index]
+        default_duration = task_to_edit[0]
+        default_task_name = task_to_edit[1]
+        default_color = task_to_edit[2]
+    elif st.session_state.clear_form:
+        # Clear form after submit or day change
+        default_duration = 1
+        default_task_name = ""
+        default_color = "#4682B4"
+        st.session_state.clear_form = False
+    else:
+        # Normal mode - keep current values or defaults
+        default_duration = 1
+        default_task_name = ""
+        default_color = "#4682B4"
 
-    if submit_btn:
-        if not task_name:
-            st.error("Task name cannot be empty.")
-        else:
-            if st.session_state.editing_day == day and st.session_state.editing_index is not None:
-                st.session_state.tasks[day][st.session_state.editing_index] = (duration, task_name, color)
-                st.success(f"Updated {task_name} on {day} ({duration}h)")
+    # Task inputs wrapped in form to prevent accidental submissions
+    with st.form(key=f"task_form_{day}_{st.session_state.get('form_key', 0)}"):
+        task_name = st.text_input("Task name:", value=default_task_name)
+        duration = st.number_input("Duration (hours):", 1, max_hours, value=default_duration)
+        color = st.color_picker("Pick a color:", value=default_color)
+        submit_btn = st.form_submit_button("Add Task" if st.session_state.editing_day is None else "Update Task")
+
+        if submit_btn:
+            if not task_name:
+                st.error("Task name cannot be empty.")
             else:
-                st.session_state.tasks[day].append((duration, task_name, color))
-                st.success(f"Added {task_name} on {day} ({duration}h)")
-            # Clear temp variables
-            st.session_state.temp_task_name = ""
-            st.session_state.temp_duration = 1
-            st.session_state.temp_color = "#4682B4"
-            st.session_state.editing_day = None
-            st.session_state.editing_index = None
-
-            st.rerun()
+                if st.session_state.editing_day == day and st.session_state.editing_index is not None:
+                    st.session_state.tasks[day][st.session_state.editing_index] = (duration, task_name, color)
+                    st.success(f"Updated {task_name} on {day} ({duration}h)")
+                else:
+                    st.session_state.tasks[day].append((duration, task_name, color))
+                    st.success(f"Added {task_name} on {day} ({duration}h)")
+                
+                # Clear form after submit
+                st.session_state.editing_day = None
+                st.session_state.editing_index = None
+                st.session_state.clear_form = True
+                # Increment form key to force widget recreation
+                if "form_key" not in st.session_state:
+                    st.session_state.form_key = 0
+                st.session_state.form_key += 1
+                st.rerun()
 
 # --- Tasks List for Selected Day ---
 with st.expander(f"Tasks for {st.session_state.selected_day}", expanded=True):
@@ -119,10 +131,11 @@ with st.expander(f"Tasks for {st.session_state.selected_day}", expanded=True):
             if st.button("Edit", key=f"edit_{day}_{idx}", type="primary", width="stretch"):
                 st.session_state.editing_day = day
                 st.session_state.editing_index = idx
-                task_to_edit = st.session_state.tasks[day][idx]
-                st.session_state.temp_duration = task_to_edit[0]
-                st.session_state.temp_task_name = task_to_edit[1]
-                st.session_state.temp_color = task_to_edit[2]
+                st.session_state.clear_form = False
+                # Increment form key to force widget recreation with new values
+                if "form_key" not in st.session_state:
+                    st.session_state.form_key = 0
+                st.session_state.form_key += 1
                 st.rerun()
         with col3:
             if st.button("Del", key=f"delete_{day}_{idx}", type="secondary", width="stretch"):
@@ -130,96 +143,259 @@ with st.expander(f"Tasks for {st.session_state.selected_day}", expanded=True):
                 if st.session_state.editing_day == day and st.session_state.editing_index == idx:
                     st.session_state.editing_day = None
                     st.session_state.editing_index = None
-                    st.session_state.temp_task_name = ""
-                    st.session_state.temp_duration = 1
-                    st.session_state.temp_color = "#4682B4"
+                    st.session_state.clear_form = True
+                    if "form_key" not in st.session_state:
+                        st.session_state.form_key = 0
+                    st.session_state.form_key += 1
                 st.rerun()
 
 # --- Plot Schedule ---
 with st.container():
-    st.write(
-        "📊 **Weekly Schedule Chart:** On mobile, scroll horizontally to view all hours."
-    )
-    fig, ax = plt.subplots(figsize=(18, 7))
-    fig.patch.set_facecolor("#111111")  # GSAP inspired dark background
-    ax.set_facecolor("#1E1E1E")
-    ax.tick_params(colors="white")
-    ax.set_xlabel("Hours", fontsize=13, fontweight="bold", color="white")
+    st.markdown("""
+    <div style='text-align: center; margin: 30px 0;'>
+        <h2 style='color: #39FF14; font-weight: 900; font-size: 2.2em; margin-bottom: 10px;'>
+            📊 Weekly Focus Schedule
+        </h2>
+        <p style='color: #888; font-size: 1.1em; margin: 0;'>
+            Swipe horizontally on mobile to view all hours
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    fig, ax = plt.subplots(figsize=(20, 8))
+    
+    # Bold dark theme
+    fig.patch.set_facecolor("#0A0A0A")
+    ax.set_facecolor("#1A1A1A")
+    
+    # Modern styling
+    ax.tick_params(colors="#FFFFFF", labelsize=12, width=2, length=6)
+    ax.set_xlabel("Hours", fontsize=16, fontweight="bold", color="#39FF14", labelpad=15)
     ax.set_ylabel("")
-    ax.set_title("Weekly Focus Schedule", fontsize=16, fontweight="bold", pad=20, color="white")
+    
+    # Bold grid
+    ax.grid(axis="x", linestyle="-", alpha=0.2, color="#39FF14", linewidth=1.5)
+    ax.grid(axis="y", linestyle="--", alpha=0.1, color="#666666", linewidth=1)
+    
+    # Neon border styling
     for spine in ax.spines.values():
         spine.set_color("#39FF14")
-        spine.set_linewidth(1.2)
-    ax.grid(axis="x", linestyle="--", alpha=0.3, color="white")
+        spine.set_linewidth(3)
+    
+    # Hide top and right spines for cleaner look
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
 
     for i, day in enumerate(days):
         allocated = st.session_state.focus_hours.get(day, 0)
         tasks = st.session_state.tasks.get(day, [])
         used = sum(task[0] for task in tasks)
-        cumulative_start = 0
-        for duration, label, color in tasks:
-            if used > allocated:
-                facecolor = "#FF9999"
-                edgecolor = color
-                linewidth = 2
-            else:
-                facecolor = color
-                edgecolor = "black"
-                linewidth = 1
-            # Rounded bar edges
-            bar = ax.barh(
-                y=i, width=duration, left=cumulative_start, height=0.6,
-                color=facecolor, edgecolor=edgecolor, linewidth=linewidth
+        
+        # Background allocated hours bar with gradient effect
+        if allocated > 0:
+            bg_bar = ax.barh(
+                y=i, width=allocated, left=0, height=0.7,
+                color="#2A2A2A", edgecolor="#444444", linewidth=2,
+                alpha=0.6, zorder=1
             )
-            # Add value label inside bar
-            full_label = f"{label} ({duration}h)"
-            wrapped_label = textwrap.fill(full_label, width=50)
+        
+        cumulative_start = 0
+        for j, (duration, label, color) in enumerate(tasks):
+            # Bold color scheme
+            if used > allocated:
+                facecolor = "#FF4444"  # Bright red for overbooked
+                edgecolor = "#FFFFFF"
+                linewidth = 3
+                alpha = 0.9
+            else:
+                # Make colors more vibrant
+                import matplotlib.colors as mcolors
+                rgb = mcolors.hex2color(color)
+                # Increase saturation
+                hsv = mcolors.rgb_to_hsv(rgb)
+                hsv[1] = min(1.0, hsv[1] * 1.4)  # Boost saturation
+                hsv[2] = min(1.0, hsv[2] * 1.1)  # Slight brightness boost
+                vibrant_color = mcolors.hsv_to_rgb(hsv)
+                facecolor = vibrant_color
+                edgecolor = "#FFFFFF"
+                linewidth = 2
+                alpha = 0.95
+            
+            # Create bar with rounded corners effect
+            bar = ax.barh(
+                y=i, width=duration, left=cumulative_start, height=0.7,
+                color=facecolor, edgecolor=edgecolor, linewidth=linewidth,
+                alpha=alpha, zorder=2
+            )
+            
+            # Bold text styling
+            full_label = f"{label}\n({duration}h)"
+            wrapped_label = textwrap.fill(full_label, width=35)
+            
+            # Add shadow effect to text
+            shadow_offset = 0.02
+            ax.text(
+                cumulative_start + duration/2 + shadow_offset, i - shadow_offset,
+                wrapped_label,
+                ha="center", va="center", color="#000000",
+                fontsize=11, fontweight="bold", alpha=0.6, zorder=3
+            )
+            
+            # Main text
+            text_color = "#FFFFFF" if sum(mcolors.hex2color(color))/3 < 0.5 else "#000000"
             ax.text(
                 cumulative_start + duration/2, i,
                 wrapped_label,
-                ha="center", va="center", color="white",
-                fontsize=12, fontweight="bold"
+                ha="center", va="center", color=text_color,
+                fontsize=11, fontweight="900", zorder=4
             )
             cumulative_start += duration
 
-        # Show allocated hours as a faint bar behind tasks
-        if allocated > 0:
-            ax.barh(
-                y=i, width=allocated, left=0, height=0.6,
-                color="#e0e0e0", edgecolor="none", zorder=0
-            )
-
+    # Bold day labels
     ax.set_yticks(range(len(days)))
-    ax.set_yticklabels(days, fontsize=13, fontweight="bold", color="white")
-    ax.set_xticks(range(0, max_hours+1))
+    ax.set_yticklabels([f"💪 {day}" for day in days], fontsize=14, fontweight="bold", color="#FFFFFF")
+    
+    # Bold hour markers
+    ax.set_xticks(range(0, max_hours+1, 2))  # Every 2 hours for cleaner look
     ax.set_xlim(0, max_hours)
     ax.invert_yaxis()
-    ax.spines['top'].set_visible(False)
-    ax.spines['right'].set_visible(False)
-    ax.spines['left'].set_visible(True)
-    ax.spines['bottom'].set_visible(True)
+    
+    # Add subtle background pattern
+    for i in range(len(days)):
+        if i % 2 == 0:
+            ax.axhspan(i-0.4, i+0.4, alpha=0.05, color="#39FF14", zorder=0)
 
-    st.pyplot(fig)
+    plt.tight_layout(pad=2.0)
+    st.pyplot(fig, use_container_width=True)
 
-    # Export figure as PNG
-    buf = io.BytesIO()
-    fig.savefig(buf, format="png")
-    buf.seek(0)
-    st.download_button(
-        label="Download Schedule as PNG",
-        data=buf,
-        file_name="my_focus_schedule.png",
-        mime="image/png"
-    )
+    # Bold download section
+    st.markdown("""
+    <div style='text-align: center; margin: 20px 0;'>
+    """, unsafe_allow_html=True)
+    
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        # Export complete section as PNG including heading
+       # Export complete section as PNG including heading
+        buf = io.BytesIO()
+        
+        # Create new figure with heading - increased height for proper spacing
+        complete_fig = plt.figure(figsize=(20, 12))
+        complete_fig.patch.set_facecolor("#0A0A0A")
+        
+        # Add title at top with more space
+        complete_fig.suptitle("📊 Weekly Focus Schedule", 
+                            fontsize=28, fontweight='bold', color='#39FF14', y=0.96)
+        complete_fig.text(0.5, 0.93, "Swipe horizontally on mobile to view all hours", 
+                         ha='center', fontsize=14, color='#888888')
+        
+        # Create subplot for the main chart - moved down to give title more room
+        ax = complete_fig.add_subplot(111)
+        ax.set_position([0.08, 0.08, 0.85, 0.8])  # [left, bottom, width, height]
+        
+        # Copy all the chart styling
+        ax.set_facecolor("#1A1A1A")
+        ax.tick_params(colors="#FFFFFF", labelsize=12, width=2, length=6)
+        ax.set_xlabel("Hours", fontsize=16, fontweight="bold", color="#39FF14", labelpad=15)
+        ax.set_ylabel("")
+        ax.grid(axis="x", linestyle="-", alpha=0.2, color="#39FF14", linewidth=1.5)
+        ax.grid(axis="y", linestyle="--", alpha=0.1, color="#666666", linewidth=1)
+        
+        for spine in ax.spines.values():
+            spine.set_color("#39FF14")
+            spine.set_linewidth(3)
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
 
-# --- Reset button ---
-if st.button("Reset Schedule"):
-    st.session_state.tasks = {day: [] for day in days}
-    st.session_state.focus_hours = {day: 0 for day in days}
-    st.session_state.selected_day = days[0]
-    st.session_state.editing_day = None
-    st.session_state.editing_index = None
-    st.session_state.temp_task_name = ""
-    st.session_state.temp_duration = 1
-    st.session_state.temp_color = "#4682B4"
-    st.rerun()
+        # Recreate all the bars and data
+        for i, day in enumerate(days):
+            allocated = st.session_state.focus_hours.get(day, 0)
+            tasks = st.session_state.tasks.get(day, [])
+            used = sum(task[0] for task in tasks)
+            
+            if allocated > 0:
+                ax.barh(y=i, width=allocated, left=0, height=0.7,
+                       color="#2A2A2A", edgecolor="#444444", linewidth=2,
+                       alpha=0.6, zorder=1)
+            
+            cumulative_start = 0
+            for j, (duration, label, color) in enumerate(tasks):
+                if used > allocated:
+                    facecolor = "#FF4444"
+                    edgecolor = "#FFFFFF"
+                    linewidth = 3
+                    alpha = 0.9
+                else:
+                    import matplotlib.colors as mcolors
+                    rgb = mcolors.hex2color(color)
+                    hsv = mcolors.rgb_to_hsv(rgb)
+                    hsv[1] = min(1.0, hsv[1] * 1.4)
+                    hsv[2] = min(1.0, hsv[2] * 1.1)
+                    vibrant_color = mcolors.hsv_to_rgb(hsv)
+                    facecolor = vibrant_color
+                    edgecolor = "#FFFFFF"
+                    linewidth = 2
+                    alpha = 0.95
+                
+                ax.barh(y=i, width=duration, left=cumulative_start, height=0.7,
+                       color=facecolor, edgecolor=edgecolor, linewidth=linewidth,
+                       alpha=alpha, zorder=2)
+                
+                full_label = f"{label}\n({duration}h)"
+                wrapped_label = textwrap.fill(full_label, width=35)
+                
+                shadow_offset = 0.02
+                ax.text(cumulative_start + duration/2 + shadow_offset, i - shadow_offset,
+                       wrapped_label, ha="center", va="center", color="#000000",
+                       fontsize=11, fontweight="bold", alpha=0.6, zorder=3)
+                
+                text_color = "#FFFFFF" if sum(mcolors.hex2color(color))/3 < 0.5 else "#000000"
+                ax.text(cumulative_start + duration/2, i, wrapped_label,
+                       ha="center", va="center", color=text_color,
+                       fontsize=11, fontweight="900", zorder=4)
+                cumulative_start += duration
+
+        ax.set_yticks(range(len(days)))
+        ax.set_yticklabels([f"💪 {day}" for day in days], fontsize=14, fontweight="bold", color="#FFFFFF")
+        ax.set_xticks(range(0, max_hours+1, 2))
+        ax.set_xlim(0, max_hours)
+        ax.invert_yaxis()
+        
+        for i in range(len(days)):
+            if i % 2 == 0:
+                ax.axhspan(i-0.4, i+0.4, alpha=0.05, color="#39FF14", zorder=0)
+        
+        complete_fig.savefig(buf, format="png", dpi=300, bbox_inches='tight', 
+                           facecolor="#0A0A0A", edgecolor='none')
+        buf.seek(0)
+        plt.close(complete_fig)  # Close to free memory
+        
+        st.download_button(
+            label="🚀 Download Schedule as PNG",
+            data=buf,
+            file_name="my_focus_schedule.png",
+            mime="image/png",
+            use_container_width=True
+        )
+    
+    st.markdown("</div>", unsafe_allow_html=True)
+
+st.markdown("""
+<div style='text-align: center; margin: 20px 0;'>
+""", unsafe_allow_html=True)
+
+col1, col2, col3 = st.columns([1, 2, 1])
+with col2:
+    if st.button("🗑️ Reset Schedule", use_container_width=True, type="secondary"):
+        st.session_state.tasks = {day: [] for day in days}
+        st.session_state.focus_hours = {day: 0 for day in days}
+        st.session_state.selected_day = days[0]
+        st.session_state.editing_day = None
+        st.session_state.editing_index = None
+        st.session_state.clear_form = True
+        if "form_key" not in st.session_state:
+            st.session_state.form_key = 0
+        st.session_state.form_key += 1
+        st.rerun()
+
+st.markdown("</div>", unsafe_allow_html=True)
