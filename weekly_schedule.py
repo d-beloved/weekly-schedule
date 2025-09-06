@@ -1,7 +1,9 @@
 import streamlit as st
 import matplotlib.pyplot as plt
+import matplotlib.colors as mcolors
 import io
 import textwrap
+import re
 
 # --- App title ---
 st.markdown(
@@ -35,6 +37,57 @@ if all(v == 0 for v in st.session_state.focus_hours.values()):
     max_hours = 12
 else:
     max_hours = max(st.session_state.focus_hours.values())
+
+# Initialize goal-color mapping and color palette
+if "goal_colors" not in st.session_state:
+    st.session_state.goal_colors = {}
+
+if "color_palette" not in st.session_state:
+    # Curated color palette that looks good together
+    st.session_state.color_palette = [
+        "#4A90E2",  # Blue
+        "#7ED321",  # Green  
+        "#F5A623",  # Orange
+        "#D0021B",  # Red
+        "#9013FE",  # Purple
+        "#50E3C2",  # Teal
+        "#B8E986",  # Light Green
+        "#FF6B6B",  # Coral
+        "#4ECDC4",  # Mint
+        "#45B7D1",  # Sky Blue
+        "#96CEB4",  # Sage
+        "#FFEAA7",  # Yellow
+        "#DDA0DD",  # Plum
+        "#87CEEB",  # Light Blue
+        "#F0A591"   # Peach
+    ]
+
+def get_goal_color(task_name):
+    """Get color for a goal using fuzzy matching"""
+    
+    # Clean and normalize the task name for matching
+    clean_task = re.sub(r'[^\w\s]', '', task_name.lower().strip())
+    clean_words = set(clean_task.split())
+    
+    # Check existing goals for fuzzy match
+    for existing_goal, color in st.session_state.goal_colors.items():
+        clean_existing = re.sub(r'[^\w\s]', '', existing_goal.lower().strip())
+        existing_words = set(clean_existing.split())
+        
+        # If they share significant words, consider it a match
+        if clean_words and existing_words:
+            overlap = len(clean_words.intersection(existing_words))
+            min_words = min(len(clean_words), len(existing_words))
+            
+            # Match if at least 60% of words overlap or exact substring match
+            if (overlap / min_words >= 0.6) or (clean_task in clean_existing) or (clean_existing in clean_task):
+                return color
+    
+    # No match found, assign new color
+    color_index = len(st.session_state.goal_colors) % len(st.session_state.color_palette)
+    new_color = st.session_state.color_palette[color_index]
+    st.session_state.goal_colors[task_name] = new_color
+    return new_color
 
 # Storage for tasks
 if "tasks" not in st.session_state:
@@ -83,30 +136,67 @@ with st.expander("Add or Edit Task", expanded=True):
         # Clear form after submit or day change
         default_duration = 1
         default_task_name = ""
-        default_color = "#4682B4"
+        default_color = st.session_state.color_palette[0]  # First color as default
         st.session_state.clear_form = False
     else:
         # Normal mode - keep current values or defaults
         default_duration = 1
         default_task_name = ""
-        default_color = "#4682B4"
+        default_color = st.session_state.color_palette[0]  # First color as default
 
     # Task inputs wrapped in form to prevent accidental submissions
     with st.form(key=f"task_form_{day}_{st.session_state.get('form_key', 0)}"):
         task_name = st.text_input("Task name:", value=default_task_name)
         duration = st.number_input("Duration (hours):", 1, max_hours, value=default_duration)
-        color = st.color_picker("Pick a color:", value=default_color)
+        
+        # Auto-suggest color based on task name
+        if task_name and task_name.strip():
+            suggested_color = get_goal_color(task_name)
+        else:
+            suggested_color = st.session_state.color_palette[0]
+        
+        color = st.color_picker("Pick a color (Optional):", value=suggested_color)
+        
+        # Show matching info
+        if task_name and task_name.strip():
+            matched_goal = None
+            clean_task = re.sub(r'[^\w\s]', '', task_name.lower().strip())
+            clean_words = set(clean_task.split())
+            
+            for existing_goal in st.session_state.goal_colors.keys():
+                clean_existing = re.sub(r'[^\w\s]', '', existing_goal.lower().strip())
+                existing_words = set(clean_existing.split())
+                
+                if clean_words and existing_words:
+                    overlap = len(clean_words.intersection(existing_words))
+                    min_words = min(len(clean_words), len(existing_words))
+                    
+                    if (overlap / min_words >= 0.6) or (clean_task in clean_existing) or (clean_existing in clean_task):
+                        if existing_goal != task_name:  # Only show if it's different
+                            matched_goal = existing_goal
+                        break
+            
+            if matched_goal:
+                st.info(f"💡 Matched with existing goal: '{matched_goal}'")
+            elif task_name.strip() not in st.session_state.goal_colors:
+                st.success(f"✨ New goal detected - assigned fresh color")
+        
         submit_btn = st.form_submit_button("Add Task" if st.session_state.editing_day is None else "Update Task")
 
         if submit_btn:
             if not task_name:
                 st.error("Task name cannot be empty.")
             else:
+                # Use the actual color from the picker, but update the goal mapping
+                final_color = color
+                if task_name.strip():
+                    st.session_state.goal_colors[task_name] = final_color
+                    
                 if st.session_state.editing_day == day and st.session_state.editing_index is not None:
-                    st.session_state.tasks[day][st.session_state.editing_index] = (duration, task_name, color)
+                    st.session_state.tasks[day][st.session_state.editing_index] = (duration, task_name, final_color)
                     st.success(f"Updated {task_name} on {day} ({duration}h)")
                 else:
-                    st.session_state.tasks[day].append((duration, task_name, color))
+                    st.session_state.tasks[day].append((duration, task_name, final_color))
                     st.success(f"Added {task_name} on {day} ({duration}h)")
                 
                 # Clear form after submit
@@ -209,11 +299,10 @@ with st.container():
                 alpha = 0.9
             else:
                 # Make colors more vibrant
-                import matplotlib.colors as mcolors
                 rgb = mcolors.hex2color(color)
                 # Increase saturation
                 hsv = mcolors.rgb_to_hsv(rgb)
-                hsv[1] = min(1.0, hsv[1] * 1.4)  # Boost saturation
+                hsv[1] = min(1.0, hsv[1] * 1.0)  # Boost saturation
                 hsv[2] = min(1.0, hsv[2] * 1.1)  # Slight brightness boost
                 vibrant_color = mcolors.hsv_to_rgb(hsv)
                 facecolor = vibrant_color
@@ -238,7 +327,7 @@ with st.container():
                 cumulative_start + duration/2 + shadow_offset, i - shadow_offset,
                 wrapped_label,
                 ha="center", va="center", color="#000000",
-                fontsize=11, fontweight="bold", alpha=0.6, zorder=3
+                fontsize=14, fontweight="bold", alpha=0, zorder=3, backgroundcolor="#00000022"
             )
             
             # Main text
@@ -247,7 +336,7 @@ with st.container():
                 cumulative_start + duration/2, i,
                 wrapped_label,
                 ha="center", va="center", color=text_color,
-                fontsize=11, fontweight="900", zorder=4
+                fontsize=14, fontweight="900", zorder=4, backgroundcolor="#00000022"
             )
             cumulative_start += duration
 
@@ -284,7 +373,7 @@ with st.container():
         
         # Add title at top with more space
         complete_fig.suptitle("Weekly Focus Schedule", 
-                            fontsize=28, fontweight='bold', color='#39FF14', y=0.96)
+                            fontsize=28, fontweight='bold', color='#39FF14', y=0.95)
         
         # Create subplot for the main chart - moved down to give title more room
         ax = complete_fig.add_subplot(111)
@@ -323,7 +412,6 @@ with st.container():
                     linewidth = 3
                     alpha = 0.9
                 else:
-                    import matplotlib.colors as mcolors
                     rgb = mcolors.hex2color(color)
                     hsv = mcolors.rgb_to_hsv(rgb)
                     hsv[1] = min(1.0, hsv[1] * 1.4)
@@ -344,12 +432,12 @@ with st.container():
                 shadow_offset = 0.02
                 ax.text(cumulative_start + duration/2 + shadow_offset, i - shadow_offset,
                        wrapped_label, ha="center", va="center", color="#000000",
-                       fontsize=11, fontweight="bold", alpha=0.6, zorder=3)
+                       fontsize=14, fontweight="bold", alpha=0, zorder=3, backgroundcolor="#00000022")
                 
                 text_color = "#FFFFFF" if sum(mcolors.hex2color(color))/3 < 0.5 else "#000000"
                 ax.text(cumulative_start + duration/2, i, wrapped_label,
                        ha="center", va="center", color=text_color,
-                       fontsize=11, fontweight="900", zorder=4)
+                       fontsize=14, fontweight="900", zorder=4, backgroundcolor="#00000022")
                 cumulative_start += duration
 
         ax.set_yticks(range(len(days)))
